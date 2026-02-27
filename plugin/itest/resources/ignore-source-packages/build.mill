@@ -1,0 +1,17 @@
+//| mill-version: 1.1.2
+//| mvnDeps:
+//|   - io.github.alexarchambault::mill-missinglink::TEST
+
+package build
+
+import mill._
+import mill.scalalib._
+import io.github.alexarchambault.millmissinglink._
+
+/** A project that ignores conflicts originating from the "foo" package. */
+object foo extends ScalaModule with MissingLink {
+  def scalaVersion = "2.13.16"
+
+  // Ignore any conflicts where the calling code is in "foo" or a sub-package
+  override def missinglinkIgnoreSourcePackages = Task { Seq("foo") }
+}

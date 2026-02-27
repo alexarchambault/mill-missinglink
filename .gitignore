@@ -1,2 +1,6 @@
-.bsp/
 out/
+.bsp/
+.idea/
+.metals/
+.vscode/
+*.class

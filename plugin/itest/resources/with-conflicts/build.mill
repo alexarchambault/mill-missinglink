@@ -1,0 +1,56 @@
+//| mill-version: 1.1.2
+//| mvnDeps:
+//|   - io.github.alexarchambault::mill-missinglink::TEST
+
+package build
+
+import mill._
+import mill.scalalib._
+import io.github.alexarchambault.millmissinglink._
+
+// ---------------------------------------------------------------------------
+// Simulated dependency version conflict
+//
+// The scenario:
+//   libCv1  — the *runtime* version of "Lib": has only `hello()`
+//   libCv2  — the *compile-time* version of "Lib": adds `newMethod()`
+//   libA    — a library compiled against libCv2 (so it calls `Lib.newMethod()`),
+//             but libCv1 is what ends up on the runtime classpath
+//   app     — our project, depends on libA (and transitively libCv1 at runtime)
+//
+// missinglinkCheck on `app` should detect that libA's code calls
+// Lib.newMethod() which is absent from libCv1.
+// ---------------------------------------------------------------------------
+
+/** Library version 1 (runtime): Lib with only `hello()`. */
+object libCv1 extends JavaModule
+
+/** Library version 2 (compile-time only): Lib with both `hello()` and `newMethod()`. */
+object libCv2 extends JavaModule
+
+/** A library that was compiled against libCv2 but ships with libCv1 at runtime.
+  *
+  * The compileClasspath override replaces libCv1 with libCv2 so that
+  * LibAClass.java can call Lib.newMethod().  At runtime (moduleDeps), only
+  * libCv1 is present — creating the version conflict.
+  */
+object libA extends JavaModule {
+  override def moduleDeps = Seq(libCv1)
+
+  // Compile against libCv2 (adds newMethod) instead of libCv1
+  override def compileClasspath = Task {
+    val v1Paths = libCv1.localClasspath().map(_.path).toSet
+    val base = super.compileClasspath().filter(ref => !v1Paths.contains(ref.path))
+    base ++ libCv2.localClasspath()
+  }
+}
+
+/** Our project: calls into libA, which in turn calls the missing Lib.newMethod().
+  *
+  * missinglinkCheck should report a METHOD_SIGNATURE_NOT_FOUND conflict because
+  * libA's compiled bytecode references Lib.newMethod() which is absent from
+  * the libCv1 artifact on the runtime classpath.
+  */
+object app extends JavaModule with MissingLink {
+  override def moduleDeps = Seq(libA)
+}

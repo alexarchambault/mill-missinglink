@@ -1,13 +1,25 @@
 package build
 
-import mill._
-import mill.scalalib._
-import io.github.alexarchambault.millmissinglink._
+import mill.*
+import mill.scalalib.*
+import io.github.alexarchambault.millmissinglink.*
 
-/** A project that ignores conflicts originating from the "foo" package. */
-object foo extends ScalaModule with MissingLink {
-  def scalaVersion = "2.13.16"
+object libCv1 extends JavaModule
 
-  // Ignore any conflicts where the calling code is in "foo" or a sub-package
-  override def missinglinkIgnoreSourcePackages = Task { Seq("foo") }
+object libCv2 extends JavaModule
+
+object libA extends JavaModule {
+  def moduleDeps = Seq(libCv1)
+
+  // Compile against libCv2 (adds newMethod) instead of libCv1
+  def compileClasspath = Task {
+    val v1Paths = libCv1.localClasspath().map(_.path).toSet
+    val base = super.compileClasspath().filter(ref => !v1Paths.contains(ref.path))
+    base ++ libCv2.localClasspath()
+  }
+}
+
+object app extends JavaModule with MissingLink {
+  def moduleDeps = Seq(libA)
+  def missinglinkIgnoreSourcePackages = Task(Seq("com.example"))
 }

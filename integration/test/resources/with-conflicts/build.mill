@@ -1,8 +1,8 @@
 package build
 
-import mill._
-import mill.scalalib._
-import io.github.alexarchambault.millmissinglink._
+import mill.*
+import mill.scalalib.*
+import io.github.alexarchambault.millmissinglink.*
 
 // ---------------------------------------------------------------------------
 // Simulated dependency version conflict
@@ -31,10 +31,10 @@ object libCv2 extends JavaModule
   * libCv1 is present — creating the version conflict.
   */
 object libA extends JavaModule {
-  override def moduleDeps = Seq(libCv1)
+  def moduleDeps = Seq(libCv1)
 
   // Compile against libCv2 (adds newMethod) instead of libCv1
-  override def compileClasspath = Task {
+  def compileClasspath = Task {
     val v1Paths = libCv1.localClasspath().map(_.path).toSet
     val base = super.compileClasspath().filter(ref => !v1Paths.contains(ref.path))
     base ++ libCv2.localClasspath()
@@ -48,5 +48,5 @@ object libA extends JavaModule {
   * the libCv1 artifact on the runtime classpath.
   */
 object app extends JavaModule with MissingLink {
-  override def moduleDeps = Seq(libA)
+  def moduleDeps = Seq(libA)
 }

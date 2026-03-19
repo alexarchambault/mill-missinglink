@@ -39,7 +39,7 @@ object IntegrationTests extends TestSuite {
 
     test("simple - no conflicts") {
       Using.resource(buildTester("simple")) { tester =>
-        val res = tester.eval("foo.missinglinkCheck", stdin = os.Inherit, stdout = os.Inherit, env = env)
+        val res = tester.eval("__.missinglinkCheck", stdin = os.Inherit, stdout = os.Inherit, env = env)
         assert(res.isSuccess)
         assert(res.err.contains("No conflicts found"))
       }
@@ -47,21 +47,21 @@ object IntegrationTests extends TestSuite {
 
     test("ignore source packages") {
       Using.resource(buildTester("ignore-source-packages")) { tester =>
-        val res = tester.eval("foo.missinglinkCheck", stdin = os.Inherit, stdout = os.Inherit, stderr = os.Inherit, env = env)
+        val res = tester.eval("__.missinglinkCheck", stdin = os.Inherit, stdout = os.Inherit, stderr = os.Inherit, env = env)
         assert(res.isSuccess)
       }
     }
 
     test("fail on conflicts false") {
       Using.resource(buildTester("fail-on-conflicts-false")) { tester =>
-        val res = tester.eval("foo.missinglinkCheck", stdin = os.Inherit, stdout = os.Inherit, stderr = os.Inherit, env = env)
+        val res = tester.eval("__.missinglinkCheck", stdin = os.Inherit, stdout = os.Inherit, stderr = os.Inherit, env = env)
         assert(res.isSuccess)
       }
     }
 
     test("with conflicts - detects missing class") {
       Using.resource(buildTester("with-conflicts")) { tester =>
-        val res = tester.eval("app.missinglinkCheck", stdin = os.Inherit, stdout = os.Inherit, env = env)
+        val res = tester.eval("__.missinglinkCheck", stdin = os.Inherit, stdout = os.Inherit, env = env)
         assert(!res.isSuccess)
         assert(res.err.contains("conflicts found"))
       }

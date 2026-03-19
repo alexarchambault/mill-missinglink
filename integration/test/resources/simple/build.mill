@@ -1,10 +1,15 @@
 package build
 
-import mill._
-import mill.scalalib._
-import io.github.alexarchambault.millmissinglink._
+import mill.*
+import mill.scalalib.*
+import io.github.alexarchambault.millmissinglink.*
 
-/** A minimal project with no classpath conflicts. */
-object foo extends ScalaModule with MissingLink {
-  def scalaVersion = "2.13.16"
+object libCv1 extends JavaModule
+
+object libA extends JavaModule {
+  def moduleDeps = Seq(libCv1)
+}
+
+object app extends JavaModule with MissingLink {
+  def moduleDeps = Seq(libA)
 }

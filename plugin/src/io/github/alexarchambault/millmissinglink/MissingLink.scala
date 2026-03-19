@@ -61,28 +61,9 @@ trait MissingLink extends JavaModule {
     */
   def missinglinkTargetDestinationPackages: T[Seq[String]] = Task(Nil)
 
-  /** Check for classpath linkage errors on this module's runtime classpath.
-    *
-    * Compiles the module, then uses Spotify's missinglink library to detect any missing classes
-    * or method-signature mismatches that would cause [[LinkageError]]s at runtime.
-    */
-  def missinglinkCheck(): Task.Command[Unit] = Task.Command {
+  def missinglinkConflicts: Task[Seq[Conflict]] = Task.Anon {
     val classesDir = compile().classes.path
     val classpath = runClasspath().map(_.path)
-    val failOnConflicts = missinglinkFailOnConflicts()
-    val ignoreSourcePkgs = missinglinkIgnoreSourcePackages()
-    val targetSourcePkgs = missinglinkTargetSourcePackages()
-    val ignoreDestPkgs = missinglinkIgnoreDestinationPackages()
-    val targetDestPkgs = missinglinkTargetDestinationPackages()
-
-    require(
-      ignoreSourcePkgs.isEmpty || targetSourcePkgs.isEmpty,
-      "missinglinkIgnoreSourcePackages and missinglinkTargetSourcePackages cannot both be set"
-    )
-    require(
-      ignoreDestPkgs.isEmpty || targetDestPkgs.isEmpty,
-      "missinglinkIgnoreDestinationPackages and missinglinkTargetDestinationPackages cannot both be set"
-    )
 
     val artifactLoader = new ArtifactLoader()
 
@@ -109,10 +90,29 @@ trait MissingLink extends JavaModule {
     Task.log.debug(s"Runtime artifacts on classpath: ${runtimeArtifacts.size}")
 
     val conflictChecker = new ConflictChecker()
-    val rawConflicts = conflictChecker
+    conflictChecker
       .check(projectArtifact, runtimeArtifacts.asJava, allArtifacts.asJava)
       .asScala
       .toSeq
+  }
+
+  def missinglinkCheck(): Task.Command[Unit] = Task.Command {
+    val failOnConflicts = missinglinkFailOnConflicts()
+    val ignoreSourcePkgs = missinglinkIgnoreSourcePackages()
+    val targetSourcePkgs = missinglinkTargetSourcePackages()
+    val ignoreDestPkgs = missinglinkIgnoreDestinationPackages()
+    val targetDestPkgs = missinglinkTargetDestinationPackages()
+
+    require(
+      ignoreSourcePkgs.isEmpty || targetSourcePkgs.isEmpty,
+      "missinglinkIgnoreSourcePackages and missinglinkTargetSourcePackages cannot both be set"
+    )
+    require(
+      ignoreDestPkgs.isEmpty || targetDestPkgs.isEmpty,
+      "missinglinkIgnoreDestinationPackages and missinglinkTargetDestinationPackages cannot both be set"
+    )
+
+    val rawConflicts = missinglinkConflicts()
 
     val filteredConflicts = applyFilters(
       rawConflicts,
@@ -236,7 +236,7 @@ trait MissingLink extends JavaModule {
       sourceOk && destOk
     }
 
-  private def outputConflicts(conflicts: Seq[Conflict]): Unit = {
+  def outputConflicts(conflicts: Seq[Conflict]): Unit = {
     val descriptions = Map(
       ConflictCategory.CLASS_NOT_FOUND -> "Class being called not found",
       ConflictCategory.METHOD_SIGNATURE_NOT_FOUND -> "Method being called not found"

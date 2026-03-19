@@ -31,9 +31,9 @@ In your `build.mill` (or `build.sc`) header, declare the dependency:
 ### 2. Mix `MissingLink` into your modules
 
 ```scala
-import mill._
-import mill.scalalib._
-import io.github.alexarchambault.millmissinglink._
+import mill.*
+import mill.scalalib.*
+import io.github.alexarchambault.millmissinglink.*
 
 object myProject extends ScalaModule with MissingLink {
   def scalaVersion = "3.3.5"
@@ -45,7 +45,7 @@ The trait works with any `JavaModule` — `ScalaModule`, `JavaModule`, etc.
 ### 3. Run the check
 
 ```
-mill myProject.missinglinkCheck
+./mill myProject.missinglinkCheck
 ```
 
 If no linkage errors are found, the task succeeds and prints:
@@ -76,7 +76,7 @@ All settings have sensible defaults and are optional.
 ```scala
 object myProject extends ScalaModule with MissingLink {
   def scalaVersion = "3.3.5"
-  override def missinglinkFailOnConflicts = Task { false }
+  def missinglinkFailOnConflicts = false
 }
 ```
 
@@ -86,7 +86,7 @@ object myProject extends ScalaModule with MissingLink {
 object myProject extends ScalaModule with MissingLink {
   def scalaVersion = "3.3.5"
   // Ignore conflicts where the calling code is in "com.example.legacy" or any sub-package
-  override def missinglinkIgnoreSourcePackages = Task { Seq("com.example.legacy") }
+  def missinglinkIgnoreSourcePackages = Seq("com.example.legacy")
 }
 ```
 
@@ -95,7 +95,7 @@ object myProject extends ScalaModule with MissingLink {
 ```scala
 object myProject extends ScalaModule with MissingLink {
   def scalaVersion = "3.3.5"
-  override def missinglinkTargetDestinationPackages = Task { Seq("com.criticallib") }
+  def missinglinkTargetDestinationPackages = Seq("com.criticallib")
 }
 ```
 
@@ -114,7 +114,7 @@ object myProject extends ScalaModule with MissingLink {
 
 ```
 # Run all integration tests
-./mill plugin.itest
+./mill integration.test
 
 # Compile the plugin
 ./mill plugin.compile

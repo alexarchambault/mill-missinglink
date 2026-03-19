@@ -1,7 +1,7 @@
 package io.github.alexarchambault.millmissinglink
 
-import mill._
-import mill.scalalib._
+import mill.*
+import mill.scalalib.*
 import com.spotify.missinglink.{ArtifactLoader, Conflict, ConflictChecker, Java9ModuleLoader}
 import com.spotify.missinglink.Conflict.ConflictCategory
 import com.spotify.missinglink.datamodel.{
@@ -11,8 +11,11 @@ import com.spotify.missinglink.datamodel.{
   ClassTypeDescriptor,
   DeclaredClass
 }
+
 import java.io.{File, FileInputStream}
-import scala.jdk.CollectionConverters._
+
+import scala.jdk.CollectionConverters.*
+import scala.util.Using
 
 /** A Mill plugin trait that checks for classpath linkage errors using Spotify's missinglink
   * library.
@@ -34,38 +37,36 @@ import scala.jdk.CollectionConverters._
 trait MissingLink extends JavaModule {
 
   /** Fail the build if any conflicts are found. Default: `true`. */
-  def missinglinkFailOnConflicts: T[Boolean] = Task { true }
+  def missinglinkFailOnConflicts: T[Boolean] = Task(true)
 
   /** Packages in the calling code to ignore when reporting conflicts. A conflict where the
     * calling class is in one of these packages (or a sub-package) is suppressed. Cannot be
     * combined with [[missinglinkTargetSourcePackages]].
     */
-  def missinglinkIgnoreSourcePackages: T[Seq[String]] = Task { Seq.empty[String] }
+  def missinglinkIgnoreSourcePackages: T[Seq[String]] = Task(Nil)
 
   /** If non-empty, only report conflicts where the calling class is in one of these packages (or
     * a sub-package). Cannot be combined with [[missinglinkIgnoreSourcePackages]].
     */
-  def missinglinkTargetSourcePackages: T[Seq[String]] = Task { Seq.empty[String] }
+  def missinglinkTargetSourcePackages: T[Seq[String]] = Task(Nil)
 
   /** Packages in the called code to ignore when reporting conflicts. A conflict where the called
     * class is in one of these packages (or a sub-package) is suppressed. Cannot be combined with
     * [[missinglinkTargetDestinationPackages]].
     */
-  def missinglinkIgnoreDestinationPackages: T[Seq[String]] = Task { Seq.empty[String] }
+  def missinglinkIgnoreDestinationPackages: T[Seq[String]] = Task(Nil)
 
   /** If non-empty, only report conflicts where the called class is in one of these packages (or a
     * sub-package). Cannot be combined with [[missinglinkIgnoreDestinationPackages]].
     */
-  def missinglinkTargetDestinationPackages: T[Seq[String]] = Task { Seq.empty[String] }
+  def missinglinkTargetDestinationPackages: T[Seq[String]] = Task(Nil)
 
   /** Check for classpath linkage errors on this module's runtime classpath.
     *
     * Compiles the module, then uses Spotify's missinglink library to detect any missing classes
     * or method-signature mismatches that would cause [[LinkageError]]s at runtime.
     */
-  def missinglinkCheck(): Command[Unit] = Task.Command {
-    val log = Task.log
-
+  def missinglinkCheck(): Task.Command[Unit] = Task.Command {
     val classesDir = compile().classes.path
     val classpath = runClasspath().map(_.path)
     val failOnConflicts = missinglinkFailOnConflicts()
@@ -86,29 +87,29 @@ trait MissingLink extends JavaModule {
     val artifactLoader = new ArtifactLoader()
 
     // Load runtime dependency artifacts (JARs and class dirs), excluding our own compiled classes
-    val runtimeArtifacts: Seq[Artifact] = classpath
+    val runtimeArtifacts = classpath
+      .filter(_ != classesDir)
       .filter { p =>
-        p != classesDir && os.exists(p) && (p.ext == "jar" || os.isDir(p))
+        (os.isFile(p) && p.ext == "jar") || os.isDir(p)
       }
       .map(p => artifactLoader.load(p.toIO))
 
     // Load JDK bootstrap artifacts (java.lang.*, etc.)
-    val bootstrapArtifacts: Seq[Artifact] = loadBootstrapArtifacts(artifactLoader, log)
+    val bootstrapArtifacts = loadBootstrapArtifacts(artifactLoader)
 
-    val allArtifacts: Seq[Artifact] = runtimeArtifacts ++ bootstrapArtifacts
+    val allArtifacts = runtimeArtifacts ++ bootstrapArtifacts
 
     // Build the project artifact by reading .class files from the compiled output directory
-    val projectArtifact: Artifact = buildProjectArtifact(classesDir)
+    val projectArtifact = buildProjectArtifact(classesDir)
 
-    if (projectArtifact.classes().isEmpty) {
-      log.info("No classes found in project build directory — did you run compile first?")
-    }
+    if (projectArtifact.classes().isEmpty)
+      System.err.println("No classes found in project build directory — did you run compile first?")
 
-    log.debug(s"Checking for conflicts in: ${projectArtifact.name().name()}")
-    log.debug(s"Runtime artifacts on classpath: ${runtimeArtifacts.size}")
+    Task.log.debug(s"Checking for conflicts in: ${projectArtifact.name().name()}")
+    Task.log.debug(s"Runtime artifacts on classpath: ${runtimeArtifacts.size}")
 
     val conflictChecker = new ConflictChecker()
-    val rawConflicts: Seq[Conflict] = conflictChecker
+    val rawConflicts = conflictChecker
       .check(projectArtifact, runtimeArtifacts.asJava, allArtifacts.asJava)
       .asScala
       .toSeq
@@ -125,72 +126,69 @@ trait MissingLink extends JavaModule {
       val totalBefore = rawConflicts.size
       val totalAfter = filteredConflicts.size
 
-      if (totalBefore != totalAfter)
-        log.info(
-          s"$totalAfter conflicts found! ($totalBefore total before applying package filters)"
+      System.err.println {
+        s"$totalAfter conflicts found!" + (
+          if (totalBefore == totalAfter) ""
+          else
+            s" ($totalBefore total before applying package filters)"
         )
-      else
-        log.info(s"$totalAfter conflicts found!")
+      }
 
-      outputConflicts(filteredConflicts, log)
+      outputConflicts(filteredConflicts)
 
       if (failOnConflicts)
         throw new Exception(s"There were $totalAfter missinglink conflicts")
-    } else {
-      log.info("No conflicts found")
-    }
+    } else
+      System.err.println("No conflicts found")
   }
 
   // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
 
-  private def loadBootstrapArtifacts(
-      loader: ArtifactLoader,
-      log: mill.api.Logger
-  ): Seq[Artifact] = {
+  private def loadBootstrapArtifacts(loader: ArtifactLoader): Seq[Artifact] = {
     // On Java 8 the boot class path is exposed via a system property; on Java 9+
     // it is null and we must use the module system instead.
     val bootClasspath = System.getProperty("sun.boot.class.path")
-    if (bootClasspath == null) {
-      try {
+    if (bootClasspath == null)
+      try
         Java9ModuleLoader
           .getJava9ModuleArtifacts { (msg: String, ex: Exception) =>
-            if (ex != null) log.debug(s"Warning loading Java module artifact: $msg ($ex)")
-            else log.debug(s"Warning loading Java module artifact: $msg")
+            System.err.println {
+              if (ex == null) s"Warning loading Java module artifact: $msg"
+              else s"Warning loading Java module artifact: $msg ($ex)"
+            }
           }
           .asScala
           .toSeq
-      } catch {
+      catch {
         case ex: Exception =>
-          log.debug(s"Could not load Java 9 module artifacts, bootstrap classpath will be empty: $ex")
+          System.err.println(s"Could not load Java 9 module artifacts, bootstrap classpath will be empty: $ex")
           Seq.empty
       }
-    } else {
+    else
       bootClasspath
         .split(File.pathSeparator)
         .map(new File(_))
-        .filter(f => f.exists() && (f.isFile || f.isDirectory))
+        .filter(f => f.isFile || f.isDirectory)
         .map(loader.load)
         .toSeq
-    }
   }
 
   private def buildProjectArtifact(classesDir: os.Path): Artifact = {
-    val classes: Map[ClassTypeDescriptor, DeclaredClass] =
-      if (os.exists(classesDir) && os.isDir(classesDir)) {
+    val classes =
+      if (os.isDir(classesDir))
         os.walk(classesDir)
           .filter(_.ext == "class")
           .map { classFile =>
-            val is = new FileInputStream(classFile.toIO)
-            try com.spotify.missinglink.ClassLoader.load(is)
-            finally is.close()
+            Using.resource(os.read.inputStream(classFile)) { is =>
+              com.spotify.missinglink.ClassLoader.load(is)
+            }
           }
           .map(c => c.className() -> c)
           .toMap
-      } else {
-        Map.empty
-      }
+      else
+        Map()
 
     new ArtifactBuilder()
       .name(new ArtifactName("project"))
@@ -221,7 +219,7 @@ trait MissingLink extends JavaModule {
 
       val sourceOk =
         if (ignoreSourcePkgs.nonEmpty)
-          !ignoreSourcePkgs.exists(matchesPackage(_, sourcePkg))
+          ignoreSourcePkgs.forall(!matchesPackage(_, sourcePkg))
         else if (targetSourcePkgs.nonEmpty)
           targetSourcePkgs.exists(matchesPackage(_, sourcePkg))
         else
@@ -229,7 +227,7 @@ trait MissingLink extends JavaModule {
 
       val destOk =
         if (ignoreDestPkgs.nonEmpty)
-          !ignoreDestPkgs.exists(matchesPackage(_, destPkg))
+          ignoreDestPkgs.forall(!matchesPackage(_, destPkg))
         else if (targetDestPkgs.nonEmpty)
           targetDestPkgs.exists(matchesPackage(_, destPkg))
         else
@@ -238,41 +236,41 @@ trait MissingLink extends JavaModule {
       sourceOk && destOk
     }
 
-  private def outputConflicts(conflicts: Seq[Conflict], log: mill.api.Logger): Unit = {
+  private def outputConflicts(conflicts: Seq[Conflict]): Unit = {
     val descriptions = Map(
       ConflictCategory.CLASS_NOT_FOUND -> "Class being called not found",
       ConflictCategory.METHOD_SIGNATURE_NOT_FOUND -> "Method being called not found"
     )
 
-    val byCategory = conflicts.groupBy(_.category())
+    val byCategory = conflicts.groupBy(_.category()).toVector.sortBy(_._1.name())
 
     for ((category, conflictsInCategory) <- byCategory) {
       val desc = descriptions.getOrElse(category, category.name().replace('_', ' '))
-      log.error("")
-      log.error(s"Category: $desc")
+      System.err.println()
+      System.err.println(s"Category: $desc")
 
-      val byArtifact = conflictsInCategory.groupBy(_.usedBy())
+      val byArtifact = conflictsInCategory.groupBy(_.usedBy()).toVector.sortBy(_._1.name())
 
       for ((artifactName, conflictsInArtifact) <- byArtifact) {
-        log.error(s"  In artifact: ${artifactName.name()}")
+        System.err.println(s"  In artifact: ${artifactName.name()}")
 
-        val byClass = conflictsInArtifact.groupBy(_.dependency().fromClass())
+        val byClass = conflictsInArtifact.groupBy(_.dependency().fromClass()).toVector.sortBy(_._1.getClassName())
 
         for ((classDesc, conflictsInClass) <- byClass) {
-          log.error(s"    In class: $classDesc")
+          System.err.println(s"    In class: ${classDesc.getClassName()}")
 
           for (conflict <- conflictsInClass) {
             val dep = conflict.dependency()
             val lineNum =
-              if (dep.fromLineNumber() != 0) s":${dep.fromLineNumber()}" else ""
-            log.error(
+              if (dep.fromLineNumber() == 0) "" else s":${dep.fromLineNumber()}"
+            System.err.println(
               s"      In method:  ${dep.fromMethod().prettyWithoutReturnType()}$lineNum"
             )
-            log.error(s"      ${dep.describe()}")
-            log.error(s"      Problem: ${conflict.reason()}")
+            System.err.println(s"      ${dep.describe()}")
+            System.err.println(s"      Problem: ${conflict.reason()}")
             if (conflict.existsIn() != ConflictChecker.UNKNOWN_ARTIFACT_NAME)
-              log.error(s"      Found in: ${conflict.existsIn().name()}")
-            log.error("      --------")
+              System.err.println(s"      Found in: ${conflict.existsIn().name()}")
+            System.err.println("      --------")
           }
         }
       }

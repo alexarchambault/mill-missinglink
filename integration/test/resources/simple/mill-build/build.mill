@@ -1,0 +1,8 @@
+import mill.meta.MillBuildRootModule
+import mill.scalalib.*
+
+object `package` extends MillBuildRootModule {
+  def mvnDeps = Seq(
+    mvn"io.github.alexarchambault::mill-missinglink::${sys.env("MILL_MISSINGLINK_INTEGRATION_VERSION")}"
+  )
+}

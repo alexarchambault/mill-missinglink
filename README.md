@@ -9,19 +9,13 @@ Classpath linkage errors occur when a class or method that code was compiled aga
 incompatible) at runtime — resulting in `NoClassDefFoundError`, `NoSuchMethodError`, or similar
 `LinkageError`s that are otherwise only discovered at runtime.
 
-> Inspired by [sbt-missinglink](https://github.com/scalacenter/sbt-missinglink).
-
-## Requirements
-
-| Plugin version | Mill version |
-|---------------|--------------|
-| `0.x`         | `1.x`        |
+Inspired by [sbt-missinglink](https://github.com/scalacenter/sbt-missinglink).
 
 ## Usage
 
 ### 1. Add the plugin to your build
 
-In your `build.mill` (or `build.sc`) header, declare the dependency:
+In your `build.mill` header, declare the dependency:
 
 ```scala
 //| mvnDeps:
